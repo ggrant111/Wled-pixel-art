@@ -11,7 +11,9 @@ const state = {
   selectedColor: null,
   paintMode: false,
   paintColor: [255, 0, 0],
-  paintPaletteIndex: 0
+  paintPaletteIndex: 0,
+  touchTimerId: null,
+  touchLongPressTriggered: false
 };
 
 const dom = {
@@ -409,16 +411,20 @@ function renderGrid() {
       pixel.appendChild(label);
     }
     pixel.addEventListener("click", (event) => handlePixelClick(event, i));
+    pixel.addEventListener("touchstart", (event) => handleTouchStart(event, i), {
+      passive: false
+    });
+    pixel.addEventListener("touchend", (event) => handleTouchEnd(event, i), {
+      passive: false
+    });
+    pixel.addEventListener("touchmove", clearTouchLongPress, { passive: true });
+    pixel.addEventListener("touchcancel", clearTouchLongPress, { passive: true });
     grid.appendChild(pixel);
   }
 }
 
 function handlePixelClick(event, index) {
-  if (shouldPaint(event)) {
-    paintPixel(index);
-  } else {
-    selectColorByIndex(index);
-  }
+  performPixelAction(index, shouldPaint(event));
 }
 
 function shouldPaint(event) {
@@ -429,6 +435,14 @@ function shouldPaint(event) {
       event?.altKey ||
       event?.shiftKey
   );
+}
+
+function performPixelAction(index, paint) {
+  if (paint) {
+    paintPixel(index);
+  } else {
+    selectColorByIndex(index);
+  }
 }
 
 function renderPaletteControls() {
@@ -703,6 +717,43 @@ function paintPixel(index) {
   renderGrid();
   renderPaletteControls();
   setStatus(`Painted pixel ${index + 1} with ${rgbToHex(color)}.`);
+}
+
+function handleTouchStart(event, index) {
+  if (event.touches.length > 1) return;
+  clearTouchLongPress();
+  state.touchLongPressTriggered = false;
+  if (state.paintMode) {
+    event.preventDefault();
+  }
+  state.touchTimerId = window.setTimeout(() => {
+    state.touchTimerId = null;
+    state.touchLongPressTriggered = true;
+    paintPixel(index);
+  }, 500);
+}
+
+function handleTouchEnd(event, index) {
+  if (event.changedTouches.length > 1) return;
+  if (state.touchTimerId) {
+    clearTimeout(state.touchTimerId);
+    state.touchTimerId = null;
+  }
+  if (state.touchLongPressTriggered) {
+    state.touchLongPressTriggered = false;
+    event.preventDefault();
+    return;
+  }
+  event.preventDefault();
+  performPixelAction(index, state.paintMode);
+}
+
+function clearTouchLongPress() {
+  if (state.touchTimerId) {
+    clearTimeout(state.touchTimerId);
+    state.touchTimerId = null;
+  }
+  state.touchLongPressTriggered = false;
 }
 
 function ensurePaletteColor(color) {
