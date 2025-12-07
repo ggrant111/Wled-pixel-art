@@ -6,7 +6,9 @@ const state = {
   pixelColors: [],
   pixelPaletteIndexes: [],
   palette: [],
-  exportCache: ""
+  exportCache: "",
+  selectedColorKey: null,
+  selectedColor: null
 };
 
 const dom = {
@@ -24,6 +26,16 @@ const dom = {
   resolutionLabel: document.getElementById("resolutionLabel"),
   paletteControls: document.getElementById("paletteControls"),
   paletteSummary: document.getElementById("paletteSummary"),
+  selectionCount: document.getElementById("selectionCount"),
+  selectionPrompt: document.getElementById("selectionPrompt"),
+  selectionDetails: document.getElementById("selectionDetails"),
+  selectionSwatch: document.getElementById("selectionSwatch"),
+  selectionHex: document.getElementById("selectionHex"),
+  selectionPixels: document.getElementById("selectionPixels"),
+  paletteTarget: document.getElementById("paletteTarget"),
+  applyPaletteReplace: document.getElementById("applyPaletteReplace"),
+  customColor: document.getElementById("customColor"),
+  applyCustomReplace: document.getElementById("applyCustomReplace"),
   statusArea: document.getElementById("statusArea"),
   generateJson: document.getElementById("generateJson"),
   downloadJson: document.getElementById("downloadJson"),
@@ -77,6 +89,7 @@ function init() {
   initBlankGrid();
   wireEvents();
   renderAll();
+  updateSelectionUi();
   setStatus("Ready. Adjust settings or import an image to get started.");
 }
 
@@ -85,6 +98,7 @@ function initBlankGrid() {
   state.pixelColors = Array.from({ length: total }, () => [2, 6, 16]);
   state.palette = [[2, 6, 16]];
   state.pixelPaletteIndexes = Array(total).fill(0);
+  clearSelection();
 }
 
 function wireEvents() {
@@ -154,6 +168,9 @@ function wireEvents() {
     if (!dom.exportOutput.value) return;
     downloadJson(dom.exportOutput.value);
   });
+
+  dom.applyPaletteReplace.addEventListener("click", replaceColorWithPalette);
+  dom.applyCustomReplace.addEventListener("click", replaceColorWithCustom);
 }
 
 async function handleImageFile(file) {
@@ -188,6 +205,7 @@ function sampleImageToPixels(imageSource, targetWidth, targetHeight) {
 
 function applyPixels(pixels) {
   if (!pixels.length) return;
+  clearSelection();
   state.pixelColors = pixels.map(cloneColor);
   rebuildPaletteFromPixels();
   markExportDirty();
@@ -307,6 +325,7 @@ function colorDistance(a, b) {
 
 function resizeMatrix(newWidth, newHeight) {
   if (newWidth === state.width && newHeight === state.height) return;
+  clearSelection();
   const resized = resizePixelArray(state.pixelColors, state.width, state.height, newWidth, newHeight);
   state.width = newWidth;
   state.height = newHeight;
@@ -337,8 +356,7 @@ function markExportDirty() {
 function renderAll() {
   dom.matrixWidth.value = state.width;
   dom.matrixHeight.value = state.height;
-  dom.colorCount.value = state.paletteSize;
-  dom.colorCountValue.textContent = `${state.paletteSize} colors`;
+  syncPaletteSizeUi();
   dom.serpentineToggle.checked = state.serpentine;
   dom.resolutionLabel.textContent = `${state.width} × ${state.height}`;
   renderGrid();
@@ -355,11 +373,16 @@ function renderGrid() {
     pixel.className = "pixel";
     const color = state.pixelColors[i] ?? [0, 0, 0];
     pixel.style.background = rgbToCss(color);
+    if (state.selectedColorKey && rgbKey(color) === state.selectedColorKey) {
+      pixel.classList.add("selected");
+    }
     if (state.pixelPaletteIndexes[i] !== undefined) {
       const label = document.createElement("span");
-      label.textContent = (state.pixelPaletteIndexes[i] ?? 0) + 1;
+      const labelValue = state.pixelPaletteIndexes[i];
+      label.textContent = labelValue !== undefined ? labelValue + 1 : "";
       pixel.appendChild(label);
     }
+    pixel.addEventListener("click", () => selectColorByIndex(i));
     grid.appendChild(pixel);
   }
 }
@@ -373,6 +396,8 @@ function renderPaletteControls() {
     empty.className = "hint";
     empty.textContent = "No palette colors yet. Import an image or preset to begin.";
     dom.paletteControls.appendChild(empty);
+    populatePaletteSelect();
+    updateSelectionUi();
     return;
   }
   state.palette.forEach((color, idx) => {
@@ -398,6 +423,8 @@ function renderPaletteControls() {
     chip.append(colorInput, meta);
     dom.paletteControls.appendChild(chip);
   });
+  populatePaletteSelect();
+  updateSelectionUi();
 }
 
 function buildPaletteUsage() {
@@ -405,6 +432,176 @@ function buildPaletteUsage() {
     acc[idx] = (acc[idx] || 0) + 1;
     return acc;
   }, []);
+}
+
+function selectColorByIndex(index) {
+  const color = state.pixelColors[index];
+  if (!color) return;
+  state.selectedColor = cloneColor(color);
+  state.selectedColorKey = rgbKey(color);
+  const count = countSelectedPixels();
+  updateSelectionUi();
+  renderGrid();
+  setStatus(
+    `Selected ${rgbToHex(color)} covering ${count} pixel${count === 1 ? "" : "s"}.`
+  );
+}
+
+function updateSelectionUi() {
+  if (!dom.selectionDetails) return;
+  const hasSelection = Boolean(state.selectedColorKey && state.selectedColor);
+  dom.selectionDetails.classList.toggle("is-hidden", !hasSelection);
+  dom.selectionPrompt.classList.toggle("is-hidden", hasSelection);
+  dom.applyCustomReplace.disabled = !hasSelection;
+  dom.customColor.disabled = !hasSelection;
+  const hasPalette = state.palette.length > 0;
+  dom.paletteTarget.disabled = !hasPalette;
+  dom.applyPaletteReplace.disabled = !hasSelection || !hasPalette;
+
+  if (!hasSelection) {
+    dom.selectionCount.textContent = "No pixels selected";
+    dom.selectionPixels.textContent = "0 pixels";
+    return;
+  }
+
+  const count = countSelectedPixels();
+  dom.selectionCount.textContent = `${count} selected`;
+  dom.selectionPixels.textContent = `${count} pixel${count === 1 ? "" : "s"}`;
+  const color = state.selectedColor;
+  dom.selectionSwatch.style.background = rgbToCss(color);
+  dom.selectionHex.textContent = rgbToHex(color);
+}
+
+function populatePaletteSelect() {
+  if (!dom.paletteTarget) return;
+  const select = dom.paletteTarget;
+  const previousValue = select.value;
+  select.innerHTML = "";
+
+  if (!state.palette.length) {
+    const option = document.createElement("option");
+    option.textContent = "No palette colors available";
+    option.value = "";
+    option.disabled = true;
+    option.selected = true;
+    select.appendChild(option);
+    return;
+  }
+
+  state.palette.forEach((color, idx) => {
+    const option = document.createElement("option");
+    option.value = String(idx);
+    option.textContent = `#${idx + 1} ${rgbToHex(color)}`;
+    select.appendChild(option);
+  });
+
+  if (state.palette[Number(previousValue)]) {
+    select.value = previousValue;
+  } else {
+    select.selectedIndex = 0;
+  }
+}
+
+function countSelectedPixels() {
+  if (!state.selectedColorKey) return 0;
+  return state.pixelColors.reduce(
+    (acc, color) => (rgbKey(color) === state.selectedColorKey ? acc + 1 : acc),
+    0
+  );
+}
+
+function replaceColorWithPalette() {
+  if (!state.selectedColorKey) {
+    setStatus("Select a color in the grid first.", "warn");
+    return;
+  }
+  if (!state.palette.length) {
+    setStatus("No palette colors available yet.", "warn");
+    return;
+  }
+  const targetIndex = Number(dom.paletteTarget.value);
+  if (!Number.isInteger(targetIndex) || !state.palette[targetIndex]) {
+    setStatus("Choose a palette color to replace with.", "warn");
+    return;
+  }
+  const replaced = applyColorReplacement(targetIndex, state.palette[targetIndex]);
+  if (replaced === 0) {
+    setStatus("No pixels found for the selected color.", "warn");
+    return;
+  }
+  setStatus(
+    `Replaced ${replaced} pixel${replaced === 1 ? "" : "s"} with palette color ${
+      rgbToHex(state.palette[targetIndex])
+    }.`
+  );
+}
+
+function replaceColorWithCustom() {
+  if (!state.selectedColorKey) {
+    setStatus("Select a color in the grid first.", "warn");
+    return;
+  }
+  const hex = dom.customColor.value || "#ffffff";
+  const rgb = hexToRgb(hex);
+  const paletteIndex = ensurePaletteColor(rgb);
+  if (paletteIndex === -1) {
+    setStatus("Palette is full (32 colors). Remove a color before adding more.", "warn");
+    return;
+  }
+  const replaced = applyColorReplacement(paletteIndex, rgb);
+  if (replaced === 0) {
+    setStatus("No pixels found for the selected color.", "warn");
+    return;
+  }
+  setStatus(
+    `Replaced ${replaced} pixel${replaced === 1 ? "" : "s"} with ${rgbToHex(rgb)}.`
+  );
+}
+
+function ensurePaletteColor(color) {
+  const key = rgbKey(color);
+  const existingIndex = state.palette.findIndex((entry) => rgbKey(entry) === key);
+  if (existingIndex !== -1) {
+    return existingIndex;
+  }
+  if (state.palette.length >= 32) {
+    return -1;
+  }
+  state.palette.push(cloneColor(color));
+  state.paletteSize = Math.max(state.paletteSize, state.palette.length);
+  syncPaletteSizeUi();
+  return state.palette.length - 1;
+}
+
+function applyColorReplacement(paletteIndex, color) {
+  if (!state.pixelPaletteIndexes?.length) {
+    state.pixelPaletteIndexes = new Array(state.pixelColors.length).fill(0);
+  }
+  const nextColorKey = rgbKey(color);
+  let replaced = 0;
+  for (let i = 0; i < state.pixelColors.length; i += 1) {
+    if (rgbKey(state.pixelColors[i]) !== state.selectedColorKey) continue;
+    state.pixelPaletteIndexes[i] = paletteIndex;
+    state.pixelColors[i] = cloneColor(color);
+    replaced += 1;
+  }
+  if (replaced === 0) {
+    return 0;
+  }
+  state.selectedColor = cloneColor(color);
+  state.selectedColorKey = nextColorKey;
+  markExportDirty();
+  renderGrid();
+  renderPaletteControls();
+  return replaced;
+}
+
+function clearSelection() {
+  state.selectedColorKey = null;
+  state.selectedColor = null;
+  if (dom.selectionDetails) {
+    updateSelectionUi();
+  }
 }
 
 function loadPresetFromJson(raw) {
@@ -619,6 +816,11 @@ function hexToRgb(hex) {
   ];
 }
 
+function rgbKey(color) {
+  if (!color) return "";
+  return `${color[0] ?? 0},${color[1] ?? 0},${color[2] ?? 0}`;
+}
+
 function cloneColor(color) {
   return [
     clamp(Math.round(color?.[0] ?? 0), 0, 255),
@@ -654,4 +856,9 @@ function setStatus(message, level = "info") {
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
+}
+
+function syncPaletteSizeUi() {
+  dom.colorCount.value = state.paletteSize;
+  dom.colorCountValue.textContent = `${state.paletteSize} colors`;
 }

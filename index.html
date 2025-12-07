@@ -81,6 +81,37 @@
         <div id="paletteControls" class="palette-controls"></div>
       </section>
 
+      <section class="panel replace-panel" aria-labelledby="replace-title">
+        <div class="preview-header">
+          <h2 id="replace-title">Replace Color</h2>
+          <span id="selectionCount">No pixels selected</span>
+        </div>
+        <p id="selectionPrompt" class="hint">
+          Click any pixel in the preview grid to select its color.
+        </p>
+        <div id="selectionDetails" class="selection-details is-hidden">
+          <div class="selection-row">
+            <div id="selectionSwatch" class="selection-swatch"></div>
+            <div class="selection-meta">
+              <strong id="selectionHex">#000000</strong>
+              <span id="selectionPixels">0 pixels</span>
+            </div>
+          </div>
+          <div class="field">
+            <label for="paletteTarget">Replace with palette color</label>
+            <select id="paletteTarget"></select>
+            <button id="applyPaletteReplace" class="primary">Replace from palette</button>
+          </div>
+          <div class="field">
+            <label for="customColor">Or choose a custom color</label>
+            <div class="custom-color-row">
+              <input type="color" id="customColor" value="#ffffff" />
+              <button id="applyCustomReplace" class="ghost">Replace with picker</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section class="panel export-panel" aria-labelledby="export-title">
         <h2 id="export-title">Export WLED Preset</h2>
         <div class="action-row">
