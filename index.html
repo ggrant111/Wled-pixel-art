@@ -110,6 +110,31 @@
             </div>
           </div>
         </div>
+        <div class="single-paint">
+          <div class="panel-header">
+            <h3>Single Pixel Paint</h3>
+            <button id="togglePaintMode" class="ghost small" type="button">Paint mode off</button>
+          </div>
+          <p class="hint">
+            Choose a paint color, then click pixels while paint mode is on (or hold Ctrl/Cmd while clicking).
+          </p>
+          <div class="field">
+            <label for="paintPaletteTarget">Paint with palette color</label>
+            <select id="paintPaletteTarget"></select>
+          </div>
+          <div class="field">
+            <label for="paintCustomColor">Or pick a custom color</label>
+            <div class="custom-color-row">
+              <input type="color" id="paintCustomColor" value="#ff0000" />
+              <button id="setPaintCustom" class="ghost" type="button">Use custom color</button>
+            </div>
+          </div>
+          <div class="paint-status">
+            <span>Current paint color:</span>
+            <div id="paintSwatch" class="selection-swatch small"></div>
+            <strong id="paintHex">#FF0000</strong>
+          </div>
+        </div>
       </section>
 
       <section class="panel export-panel" aria-labelledby="export-title">

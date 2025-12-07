@@ -173,6 +173,17 @@ button.ghost {
   border: 1px solid rgba(148, 163, 184, 0.3);
 }
 
+button.ghost.is-active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: rgba(14, 165, 233, 0.12);
+}
+
+button.small {
+  padding: 0.4rem 0.9rem;
+  font-size: 0.9rem;
+}
+
 .status {
   padding: 0.75rem 1rem;
   border-radius: 0.8rem;
@@ -295,6 +306,10 @@ button.ghost {
   border: 2px solid rgba(148, 163, 184, 0.4);
   background: #000;
 }
+.selection-swatch.small {
+  width: 36px;
+  height: 36px;
+}
 
 .selection-meta {
   display: flex;
@@ -318,6 +333,28 @@ button.ghost {
   padding: 0;
   border: none;
   background: transparent;
+}
+
+.single-paint {
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid rgba(148, 163, 184, 0.2);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.paint-status {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.95rem;
+  color: var(--muted);
+}
+
+.paint-status strong {
+  color: var(--text);
+  font-size: 1rem;
 }
 
 .is-hidden {

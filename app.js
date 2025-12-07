@@ -8,7 +8,10 @@ const state = {
   palette: [],
   exportCache: "",
   selectedColorKey: null,
-  selectedColor: null
+  selectedColor: null,
+  paintMode: false,
+  paintColor: [255, 0, 0],
+  paintPaletteIndex: 0
 };
 
 const dom = {
@@ -36,6 +39,12 @@ const dom = {
   applyPaletteReplace: document.getElementById("applyPaletteReplace"),
   customColor: document.getElementById("customColor"),
   applyCustomReplace: document.getElementById("applyCustomReplace"),
+  paintPaletteTarget: document.getElementById("paintPaletteTarget"),
+  paintCustomColor: document.getElementById("paintCustomColor"),
+  setPaintCustom: document.getElementById("setPaintCustom"),
+  togglePaintMode: document.getElementById("togglePaintMode"),
+  paintSwatch: document.getElementById("paintSwatch"),
+  paintHex: document.getElementById("paintHex"),
   statusArea: document.getElementById("statusArea"),
   generateJson: document.getElementById("generateJson"),
   downloadJson: document.getElementById("downloadJson"),
@@ -90,6 +99,7 @@ function init() {
   wireEvents();
   renderAll();
   updateSelectionUi();
+  updatePaintUi();
   setStatus("Ready. Adjust settings or import an image to get started.");
 }
 
@@ -98,6 +108,9 @@ function initBlankGrid() {
   state.pixelColors = Array.from({ length: total }, () => [2, 6, 16]);
   state.palette = [[2, 6, 16]];
   state.pixelPaletteIndexes = Array(total).fill(0);
+  state.paintPaletteIndex = 0;
+  state.paintColor = cloneColor(state.palette[0]);
+  state.paintMode = false;
   clearSelection();
 }
 
@@ -171,6 +184,19 @@ function wireEvents() {
 
   dom.applyPaletteReplace.addEventListener("click", replaceColorWithPalette);
   dom.applyCustomReplace.addEventListener("click", replaceColorWithCustom);
+  if (dom.paintPaletteTarget) {
+    dom.paintPaletteTarget.addEventListener("change", () => {
+      setPaintColorFromPalette(Number(dom.paintPaletteTarget.value));
+    });
+  }
+  if (dom.setPaintCustom) {
+    dom.setPaintCustom.addEventListener("click", () => {
+      setPaintColorFromCustom(dom.paintCustomColor.value);
+    });
+  }
+  if (dom.togglePaintMode) {
+    dom.togglePaintMode.addEventListener("click", togglePaintMode);
+  }
 }
 
 async function handleImageFile(file) {
@@ -382,9 +408,27 @@ function renderGrid() {
       label.textContent = labelValue !== undefined ? labelValue + 1 : "";
       pixel.appendChild(label);
     }
-    pixel.addEventListener("click", () => selectColorByIndex(i));
+    pixel.addEventListener("click", (event) => handlePixelClick(event, i));
     grid.appendChild(pixel);
   }
+}
+
+function handlePixelClick(event, index) {
+  if (shouldPaint(event)) {
+    paintPixel(index);
+  } else {
+    selectColorByIndex(index);
+  }
+}
+
+function shouldPaint(event) {
+  return Boolean(
+    state.paintMode ||
+      event?.metaKey ||
+      event?.ctrlKey ||
+      event?.altKey ||
+      event?.shiftKey
+  );
 }
 
 function renderPaletteControls() {
@@ -396,8 +440,9 @@ function renderPaletteControls() {
     empty.className = "hint";
     empty.textContent = "No palette colors yet. Import an image or preset to begin.";
     dom.paletteControls.appendChild(empty);
-    populatePaletteSelect();
+    populatePaletteSelects();
     updateSelectionUi();
+    updatePaintUi();
     return;
   }
   state.palette.forEach((color, idx) => {
@@ -413,6 +458,7 @@ function renderPaletteControls() {
       state.pixelColors = state.pixelPaletteIndexes.map((assignment) => state.palette[assignment] || [0, 0, 0]);
       markExportDirty();
       renderGrid();
+      updatePaintUi();
     });
 
     const meta = document.createElement("div");
@@ -423,8 +469,9 @@ function renderPaletteControls() {
     chip.append(colorInput, meta);
     dom.paletteControls.appendChild(chip);
   });
-  populatePaletteSelect();
+  populatePaletteSelects();
   updateSelectionUi();
+  updatePaintUi();
 }
 
 function buildPaletteUsage() {
@@ -472,11 +519,25 @@ function updateSelectionUi() {
   dom.selectionHex.textContent = rgbToHex(color);
 }
 
-function populatePaletteSelect() {
-  if (!dom.paletteTarget) return;
-  const select = dom.paletteTarget;
-  const previousValue = select.value;
-  select.innerHTML = "";
+function populatePaletteSelects() {
+  populatePaletteSelect(dom.paletteTarget);
+  populatePaletteSelect(dom.paintPaletteTarget, state.paintPaletteIndex);
+  if (state.palette.length && dom.paintPaletteTarget && dom.paintPaletteTarget.value !== "") {
+    const idx = Number(dom.paintPaletteTarget.value);
+    if (Number.isInteger(idx) && state.palette[idx]) {
+      state.paintPaletteIndex = idx;
+      state.paintColor = cloneColor(state.palette[idx]);
+    }
+  }
+}
+
+function populatePaletteSelect(selectElement, preferredValue) {
+  if (!selectElement) return;
+  const previousValue =
+    preferredValue !== undefined && preferredValue !== null
+      ? String(preferredValue)
+      : selectElement.value;
+  selectElement.innerHTML = "";
 
   if (!state.palette.length) {
     const option = document.createElement("option");
@@ -484,7 +545,8 @@ function populatePaletteSelect() {
     option.value = "";
     option.disabled = true;
     option.selected = true;
-    select.appendChild(option);
+    selectElement.appendChild(option);
+    selectElement.disabled = true;
     return;
   }
 
@@ -492,13 +554,78 @@ function populatePaletteSelect() {
     const option = document.createElement("option");
     option.value = String(idx);
     option.textContent = `#${idx + 1} ${rgbToHex(color)}`;
-    select.appendChild(option);
+    selectElement.appendChild(option);
   });
 
-  if (state.palette[Number(previousValue)]) {
-    select.value = previousValue;
+  if (state.palette[Number(previousValue)] !== undefined) {
+    selectElement.value = String(previousValue);
   } else {
-    select.selectedIndex = 0;
+    selectElement.selectedIndex = 0;
+  }
+  selectElement.disabled = false;
+}
+
+function setPaintColorFromPalette(index) {
+  if (!state.palette.length) {
+    setStatus("No palette colors available yet.", "warn");
+    return;
+  }
+  const safeIndex = Number.isInteger(index) && state.palette[index] ? index : 0;
+  state.paintPaletteIndex = safeIndex;
+  state.paintColor = cloneColor(state.palette[safeIndex]);
+  if (dom.paintPaletteTarget) {
+    dom.paintPaletteTarget.value = String(safeIndex);
+  }
+  updatePaintUi();
+  setStatus(`Painting with palette color ${rgbToHex(state.paintColor)}.`);
+}
+
+function setPaintColorFromCustom(hex) {
+  const color = hexToRgb(hex || "#ffffff");
+  const paletteIndex = ensurePaletteColor(color);
+  if (paletteIndex === -1) {
+    setStatus("Palette is full (32 colors). Remove a color before adding more.", "warn");
+    return;
+  }
+  state.paintPaletteIndex = paletteIndex;
+  state.paintColor = cloneColor(state.palette[paletteIndex]);
+  renderPaletteControls();
+  setStatus(`Added ${rgbToHex(color)} for painting.`);
+}
+
+function togglePaintMode() {
+  state.paintMode = !state.paintMode;
+  updatePaintUi();
+  setStatus(state.paintMode ? "Paint mode enabled." : "Paint mode disabled.");
+}
+
+function updatePaintUi() {
+  if (!dom.paintSwatch || !dom.paintHex) return;
+  if (!state.palette.length) {
+    dom.paintSwatch.style.background = "#000000";
+    dom.paintHex.textContent = "#000000";
+    if (dom.togglePaintMode) {
+      dom.togglePaintMode.disabled = true;
+      dom.togglePaintMode.classList.remove("is-active");
+      dom.togglePaintMode.textContent = "Paint mode off";
+    }
+    return;
+  }
+  const index =
+    Number.isInteger(state.paintPaletteIndex) && state.palette[state.paintPaletteIndex]
+      ? state.paintPaletteIndex
+      : 0;
+  state.paintPaletteIndex = index;
+  state.paintColor = cloneColor(state.palette[index]);
+  dom.paintSwatch.style.background = rgbToCss(state.paintColor);
+  dom.paintHex.textContent = rgbToHex(state.paintColor);
+  if (dom.paintPaletteTarget) {
+    dom.paintPaletteTarget.value = String(index);
+  }
+  if (dom.togglePaintMode) {
+    dom.togglePaintMode.disabled = false;
+    dom.togglePaintMode.classList.toggle("is-active", state.paintMode);
+    dom.togglePaintMode.textContent = state.paintMode ? "Paint mode on" : "Paint mode off";
   }
 }
 
@@ -556,6 +683,26 @@ function replaceColorWithCustom() {
   setStatus(
     `Replaced ${replaced} pixel${replaced === 1 ? "" : "s"} with ${rgbToHex(rgb)}.`
   );
+}
+
+function paintPixel(index) {
+  const paletteIndex = ensurePaletteColor(state.paintColor);
+  if (paletteIndex === -1) {
+    setStatus("Palette is full (32 colors). Remove a color before adding more.", "warn");
+    return;
+  }
+  state.paintPaletteIndex = paletteIndex;
+  const color = cloneColor(state.palette[paletteIndex]);
+  state.paintColor = cloneColor(color);
+  if (!state.pixelPaletteIndexes?.length) {
+    state.pixelPaletteIndexes = new Array(state.pixelColors.length).fill(0);
+  }
+  state.pixelPaletteIndexes[index] = paletteIndex;
+  state.pixelColors[index] = cloneColor(color);
+  markExportDirty();
+  renderGrid();
+  renderPaletteControls();
+  setStatus(`Painted pixel ${index + 1} with ${rgbToHex(color)}.`);
 }
 
 function ensurePaletteColor(color) {
