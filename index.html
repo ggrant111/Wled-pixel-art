@@ -1,5 +1,155 @@
 <!DOCTYPE html>
 <html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WLED Pixel Art Generator</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header>
+        <h1>WLED Pixel Art Generator</h1>
+        <p class="subtitle">
+          Build pixel-art presets for your WLED matrix. Import an image or
+          existing preset, fine-tune the palette, then export ready-to-use JSON.
+        </p>
+      </header>
+
+      <section class="controls-grid">
+        <section class="panel" aria-labelledby="matrix-settings-title">
+          <div class="panel-header">
+            <h2 id="matrix-settings-title">Matrix Settings</h2>
+            <button id="resetGrid" class="ghost">Clear grid</button>
+          </div>
+          <div class="field">
+            <label for="matrixWidth">Width (pixels)</label>
+            <input type="number" id="matrixWidth" min="1" max="64" value="17" />
+          </div>
+          <div class="field">
+            <label for="matrixHeight">Height (pixels)</label>
+            <input type="number" id="matrixHeight" min="1" max="64" value="17" />
+          </div>
+          <div class="field">
+            <label for="colorCount">Palette size</label>
+            <input type="range" id="colorCount" min="2" max="32" value="8" />
+            <span id="colorCountValue">8 colors</span>
+          </div>
+          <div class="field checkbox">
+            <input type="checkbox" id="serpentineOrder" checked />
+            <label for="serpentineOrder">Serpentine wiring (boustrophedon)</label>
+          </div>
+        </section>
+
+        <section class="panel" aria-labelledby="import-title">
+          <h2 id="import-title">Import Source</h2>
+          <div class="import-group">
+            <label class="file-upload">
+              <input type="file" id="imageInput" accept="image/*" />
+              <span>Upload image</span>
+            </label>
+            <p class="hint">Images are scaled to your matrix resolution.</p>
+          </div>
+          <div class="import-group">
+            <label for="jsonInput">Paste WLED JSON preset</label>
+            <textarea id="jsonInput" rows="8" spellcheck="false" placeholder="Paste a WLED preset or previously exported JSON"></textarea>
+            <div class="action-row">
+              <button id="loadJson" class="primary">Load preset</button>
+              <button id="sampleJson" class="ghost">Sample preset</button>
+            </div>
+          </div>
+        </section>
+      </section>
+
+      <section class="status" role="status" aria-live="polite" id="statusArea">
+        Ready. Adjust settings or import an image to get started.
+      </section>
+
+      <section class="preview-wrapper" aria-labelledby="preview-title">
+        <div class="preview-header">
+          <h2 id="preview-title">Pixel Preview</h2>
+          <span id="resolutionLabel">17 × 17</span>
+        </div>
+        <div id="preview-grid" class="preview-grid" role="grid" aria-label="Pixel art preview"></div>
+      </section>
+
+      <section class="palette-wrapper" aria-labelledby="palette-title">
+        <div class="preview-header">
+          <h2 id="palette-title">Palette</h2>
+          <span id="paletteSummary">0 colors</span>
+        </div>
+        <div id="paletteControls" class="palette-controls"></div>
+      </section>
+
+      <section class="panel replace-panel" aria-labelledby="replace-title">
+        <div class="preview-header">
+          <h2 id="replace-title">Replace Color</h2>
+          <span id="selectionCount">No pixels selected</span>
+        </div>
+        <p id="selectionPrompt" class="hint">
+          Tap or click any pixel to select its color. Long-press (touch) or enable paint mode to paint individual squares.
+        </p>
+        <div id="selectionDetails" class="selection-details is-hidden">
+          <div class="selection-row">
+            <div id="selectionSwatch" class="selection-swatch"></div>
+            <div class="selection-meta">
+              <strong id="selectionHex">#000000</strong>
+              <span id="selectionPixels">0 pixels</span>
+            </div>
+          </div>
+          <div class="field">
+            <label for="paletteTarget">Replace with palette color</label>
+            <select id="paletteTarget"></select>
+            <button id="applyPaletteReplace" class="primary">Replace from palette</button>
+          </div>
+          <div class="field">
+            <label for="customColor">Or choose a custom color</label>
+            <div class="custom-color-row">
+              <input type="color" id="customColor" value="#ffffff" />
+              <button id="applyCustomReplace" class="ghost">Replace with picker</button>
+            </div>
+          </div>
+        </div>
+        <div class="single-paint">
+          <div class="panel-header">
+            <h3>Single Pixel Paint</h3>
+            <button id="togglePaintMode" class="ghost small" type="button">Paint mode off</button>
+          </div>
+          <p class="hint">
+            Choose a paint color, then tap/click pixels while paint mode is on. Desktop shortcut: hold Ctrl/Cmd (or Shift) while clicking to paint once. Mobile shortcut: long-press a pixel to paint once.
+          </p>
+          <div class="field">
+            <label for="paintPaletteTarget">Paint with palette color</label>
+            <select id="paintPaletteTarget"></select>
+          </div>
+          <div class="field">
+            <label for="paintCustomColor">Or pick a custom color</label>
+            <div class="custom-color-row">
+              <input type="color" id="paintCustomColor" value="#ff0000" />
+              <button id="setPaintCustom" class="ghost" type="button">Use custom color</button>
+            </div>
+          </div>
+          <div class="paint-status">
+            <span>Current paint color:</span>
+            <div id="paintSwatch" class="selection-swatch small"></div>
+            <strong id="paintHex">#FF0000</strong>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel export-panel" aria-labelledby="export-title">
+        <h2 id="export-title">Export WLED Preset</h2>
+        <div class="action-row">
+          <button id="generateJson" class="primary">Generate JSON</button>
+          <button id="downloadJson" class="ghost" disabled>Download</button>
+        </div>
+        <textarea id="exportOutput" rows="10" readonly spellcheck="false" placeholder="Generated preset JSON will appear here"></textarea>
+      </section>
+    </main>
+
+    <canvas id="workCanvas" width="17" height="17" hidden></canvas>
+    <script src="app.js" type="module"></script>
+  </body>
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
