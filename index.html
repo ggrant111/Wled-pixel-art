@@ -150,4 +150,87 @@
     <canvas id="workCanvas" width="17" height="17" hidden></canvas>
     <script src="app.js" type="module"></script>
   </body>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WLED Pixel Art Generator</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div>
+        <h1>WLED Pixel Art Generator</h1>
+        <p>Create, preview, and export presets for your WLED matrix.</p>
+      </div>
+      <a class="cta" href="https://kno.wled.ge/interfaces/json-api/" target="_blank" rel="noreferrer">Need the WLED JSON schema?</a>
+    </header>
+
+    <main>
+      <section class="panel controls">
+        <h2>1. Configure &amp; Import</h2>
+        <div class="field-grid">
+          <label>
+            Width
+            <input type="number" id="widthInput" min="1" max="64" value="17" />
+          </label>
+          <label>
+            Height
+            <input type="number" id="heightInput" min="1" max="64" value="17" />
+          </label>
+          <label class="range-label">
+            Color limit
+            <input type="range" id="colorCountInput" min="2" max="32" value="8" />
+            <span id="colorCountValue">8 colors</span>
+          </label>
+        </div>
+
+        <div class="importers">
+          <div>
+            <p class="helper">Upload an image (we'll auto-quantize)</p>
+            <button id="uploadTrigger" type="button">Upload image</button>
+            <input type="file" id="imageInput" accept="image/*" hidden />
+          </div>
+          <div>
+            <p class="helper">Or paste an existing WLED preset JSON</p>
+            <textarea id="jsonInput" rows="6" placeholder="Paste a preset JSON object..."></textarea>
+            <button id="importJsonBtn" type="button" class="ghost">Import preset</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel painting">
+        <h2>2. Paint &amp; Preview</h2>
+        <div class="brush-tools">
+          <label>
+            Brush color
+            <input type="color" id="brushColor" value="#ff006e" />
+          </label>
+          <div class="button-row">
+            <button id="fillAllBtn" type="button">Fill all</button>
+            <button id="clearGridBtn" type="button" class="ghost">Clear</button>
+          </div>
+        </div>
+
+        <div class="palette" id="paletteSwatches" aria-live="polite"></div>
+
+        <div class="grid-wrapper">
+          <div id="matrixGrid" class="grid" role="grid" aria-label="Matrix preview"></div>
+        </div>
+      </section>
+
+      <section class="panel export">
+        <h2>3. Export</h2>
+        <textarea id="jsonOutput" rows="14" readonly></textarea>
+        <div class="button-row">
+          <button id="copyJsonBtn" type="button">Copy JSON</button>
+          <button id="exportJsonBtn" type="button" class="primary">Download preset</button>
+        </div>
+        <p id="statusMessage" role="status" aria-live="polite"></p>
+      </section>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
 </html>
